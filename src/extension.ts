@@ -3,19 +3,24 @@
 import * as vscode from "vscode";
 
 import { execSync } from "child_process";
+import { join } from "path";
+
+const extensionPath = vscode.extensions.getExtension("ericmatte.ruby-irb-autocomplete")!.extensionPath;
+const script = join(extensionPath, "./src/irb_suggest.rb");
 
 // get irb suggestion from process
-function getIrbSuggestions(line: string): string[] {
+function getIrbSuggestions(input: string): string[] {
   const cursor = "irb_output=";
-  const command = `IRB::InputCompletor.retrieve_completion_data("${line}", bind: binding).to_json`;
-  const commandWrapper = `require "IRB"; puts "${cursor}#{${command}}";`;
-  const cmd = `bundle exec spring rails r '${commandWrapper}'`;
-  console.log(cmd);
-
   try {
-    const output = execSync(cmd).toString();
-    const test = output.substring(output.indexOf(cursor) + cursor.length, output.length - 1);
-    return JSON.parse(test);
+    const cmd = `bundle exec spring rails r '${script}'`;
+    console.log(cmd);
+
+    const output = execSync(`bundle exec spring rails r '${script}'`, {
+      env: { ...process.env, cursor, input },
+    }).toString();
+
+    const parsedOutput = output.substring(output.indexOf(cursor) + cursor.length, output.length - 1);
+    return JSON.parse(parsedOutput);
   } catch (error) {
     console.error(error);
     throw error;
@@ -30,27 +35,6 @@ const getInput = (line: string) => {
   return input;
 };
 
-const suggestionsToCompletionItems = (suggestions: string[]): vscode.CompletionItem[] => {
-  try {
-    const completionItems: vscode.CompletionItem[] = [];
-
-    for (let i = 0; i < suggestions.length; i++) {
-      if (!!suggestions[i]) {
-        const value = suggestions[i].split(".").pop();
-        if (value) {
-          completionItems.push(new vscode.CompletionItem(value, vscode.CompletionItemKind.Method));
-        }
-      }
-    }
-
-    console.log(completionItems.map(item => item.label));
-    return completionItems;
-  } catch (error) {
-    console.error(error);
-    throw error;
-  }
-};
-
 // this method is called when your extension is activated
 // your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
@@ -58,7 +42,29 @@ export function activate(context: vscode.ExtensionContext) {
   // This line of code will only be executed once when your extension is activated
   console.log('Congratulations, your extension "ruby-irb-autocomplete" is now active!');
 
-  let lastSuggestion: { input: string; suggestions: string[] } | undefined;
+  let lastSuggestion: { input: string; suggestions: vscode.CompletionItem[] } | undefined;
+
+  const suggestionsToCompletionItems = (input: string, suggestions: string[]): vscode.CompletionItem[] => {
+    try {
+      const completionItems: vscode.CompletionItem[] = [];
+
+      for (let i = 0; i < suggestions.length; i++) {
+        if (!!suggestions[i]) {
+          const value = suggestions[i].split(".").pop();
+          if (value) {
+            completionItems.push(new vscode.CompletionItem(value, vscode.CompletionItemKind.Method));
+          }
+        }
+      }
+
+      console.log(completionItems.map(item => item.label));
+      lastSuggestion = { input, suggestions: completionItems };
+      return completionItems;
+    } catch (error) {
+      console.error(error);
+      throw error;
+    }
+  };
 
   // suggest autocomplete for ruby files
   let rubySuggest = vscode.languages.registerCompletionItemProvider("ruby", {
@@ -70,12 +76,11 @@ export function activate(context: vscode.ExtensionContext) {
 
       if (lastSuggestion && lastSuggestion.input === input) {
         console.log(`Returning cached suggestions for ${input}`);
-        return suggestionsToCompletionItems(lastSuggestion.suggestions);
+        return lastSuggestion.suggestions;
       }
 
       const suggestions = getIrbSuggestions(input);
-      lastSuggestion = { input, suggestions };
-      return suggestionsToCompletionItems(lastSuggestion.suggestions);
+      return suggestionsToCompletionItems(input, suggestions);
     },
   });
 
