@@ -6,10 +6,20 @@ import { execSync } from "child_process";
 
 // get irb suggestion from process
 function getIrbSuggestions(line: string): string[] {
-  const command = `require "IRB"; puts IRB::InputCompletor.retrieve_completion_data("${line}", bind: binding).to_json`;
+  const cursor = "irb_output=";
+  const command = `IRB::InputCompletor.retrieve_completion_data("${line}", bind: binding).to_json`;
+  const commandWrapper = `require "IRB"; puts "${cursor}#{${command}}";`;
+  const cmd = `bundle exec spring rails r '${commandWrapper}'`;
+  console.log(cmd);
 
-  const output = execSync(`bundle exec rails r '${command}'`).toString();
-  return JSON.parse(output);
+  try {
+    const output = execSync(cmd).toString();
+    const test = output.substring(output.indexOf(cursor) + cursor.length, output.length - 1);
+    return JSON.parse(test);
+  } catch (error) {
+    console.error(error);
+    throw error;
+  }
 }
 
 const getInput = (line: string) => {
