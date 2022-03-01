@@ -2,22 +2,33 @@
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from "vscode";
 
-import { execSync } from "child_process";
+import { ProcessEnvOptions, spawn } from "child_process";
 import { join } from "path";
 
 const extensionPath = vscode.extensions.getExtension("ericmatte.ruby-irb-autocomplete")!.extensionPath;
 const script = join(extensionPath, "./src/irb_suggest.rb");
 
-// get irb suggestion from process
-function getIrbSuggestions(input: string): string[] {
+const execute = async (cmd: string, args: string[], options: ProcessEnvOptions): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const spawned = spawn(cmd, args, options);
+
+    let output = "";
+    spawned.stdout.on("data", data => {
+      output += data.toString();
+    });
+
+    spawned.on("close", () => resolve(output));
+
+    spawned.on("error", error => reject(error));
+  });
+};
+
+async function getIrbSuggestions(input: string): Promise<string[]> {
   const cursor = "irb_output=";
   try {
-    const cmd = `bundle exec spring rails r '${script}'`;
-    console.log(cmd);
-
-    const output = execSync(`bundle exec spring rails r '${script}'`, {
+    const output = await execute(`bundle`, [`exec`, `spring`, `rails`, `r`, script], {
       env: { ...process.env, cursor, input },
-    }).toString();
+    });
 
     const parsedOutput = output.substring(output.indexOf(cursor) + cursor.length, output.length - 1);
     return JSON.parse(parsedOutput);
@@ -38,8 +49,6 @@ const getInput = (line: string) => {
 // this method is called when your extension is activated
 // your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
-  // Use the console to output diagnostic information (console.log) and errors (console.error)
-  // This line of code will only be executed once when your extension is activated
   console.log('Congratulations, your extension "ruby-irb-autocomplete" is now active!');
 
   let lastSuggestion: { input: string; suggestions: vscode.CompletionItem[] } | undefined;
@@ -66,20 +75,19 @@ export function activate(context: vscode.ExtensionContext) {
     }
   };
 
-  // suggest autocomplete for ruby files
   let rubySuggest = vscode.languages.registerCompletionItemProvider("ruby", {
-    provideCompletionItems: (document, position, token, context) => {
+    provideCompletionItems: async (document, position, token, context) => {
       const line = document.lineAt(position).text.trim();
       let input = getInput(line);
 
       console.log(`Suggesting for '${input}'...`);
 
       if (lastSuggestion && lastSuggestion.input === input) {
-        console.log(`Returning cached suggestions for ${input}`);
+        console.log(`Returning cached suggestions for '${input}'`);
         return lastSuggestion.suggestions;
       }
 
-      const suggestions = getIrbSuggestions(input);
+      const suggestions = await getIrbSuggestions(input);
       return suggestionsToCompletionItems(input, suggestions);
     },
   });
