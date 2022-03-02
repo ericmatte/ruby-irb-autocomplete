@@ -35,10 +35,21 @@ const getIrbSuggestions = (input: string): string[] => {
   }
 };
 
-const getInput = (line: string) => {
-  let input = line.substring(0, line.lastIndexOf("."));
-  if (line.includes(".")) {
-    input += ".";
+const selectLatestSeparator = (line: string) => {
+  const separators = [".", ":"];
+  let latestSeparator = separators[0];
+  separators.forEach(separator => {
+    if (line.lastIndexOf(separator) > line.lastIndexOf(latestSeparator)) {
+      latestSeparator = separator;
+    }
+  });
+  return latestSeparator;
+};
+
+const getInput = (line: string, separator: string) => {
+  let input = line.substring(0, line.lastIndexOf(separator));
+  if (line.includes(separator)) {
+    input += separator;
   }
   return input;
 };
@@ -46,13 +57,17 @@ const getInput = (line: string) => {
 export function activate(context: vscode.ExtensionContext) {
   let lastSuggestion: { input: string; suggestions: vscode.CompletionItem[] } | undefined;
 
-  const suggestionsToCompletionItems = (input: string, suggestions: string[]): vscode.CompletionItem[] => {
+  const suggestionsToCompletionItems = (
+    input: string,
+    suggestions: string[],
+    separator: string,
+  ): vscode.CompletionItem[] => {
     try {
       const completionItems: vscode.CompletionItem[] = [];
 
       for (let i = 0; i < suggestions.length; i++) {
         if (!!suggestions[i]) {
-          const value = suggestions[i].split(".").pop();
+          const value = suggestions[i].split(separator).pop();
           if (value) {
             completionItems.push(new vscode.CompletionItem(value, vscode.CompletionItemKind.Method));
           }
@@ -71,8 +86,8 @@ export function activate(context: vscode.ExtensionContext) {
   let rubySuggest = vscode.languages.registerCompletionItemProvider("ruby", {
     provideCompletionItems: (document, position, token, context) => {
       const line = document.lineAt(position).text.trim();
-      let input = getInput(line);
-
+      const separator = selectLatestSeparator(line);
+      const input = getInput(line, separator);
       console.log(`Suggesting for '${input}'...`);
 
       if (lastSuggestion && lastSuggestion.input === input) {
@@ -80,7 +95,7 @@ export function activate(context: vscode.ExtensionContext) {
       }
 
       const suggestions = getIrbSuggestions(input);
-      return suggestionsToCompletionItems(input, suggestions);
+      return suggestionsToCompletionItems(input, suggestions, separator);
     },
   });
 

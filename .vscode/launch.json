@@ -9,7 +9,7 @@
       "name": "Run Extension",
       "type": "extensionHost",
       "request": "launch",
-      "args": ["${workspaceFolder}/../../web", "--extensionDevelopmentPath=${workspaceFolder}"],
+      "args": ["${input:path}", "--extensionDevelopmentPath=${workspaceFolder}"],
       "outFiles": ["${workspaceFolder}/dist/**/*.js"],
       "preLaunchTask": "${defaultBuildTask}"
     },
@@ -23,6 +23,14 @@
       ],
       "outFiles": ["${workspaceFolder}/out/**/*.js", "${workspaceFolder}/dist/**/*.js"],
       "preLaunchTask": "tasks: watch-tests"
+    }
+  ],
+  "inputs": [
+    {
+      "id": "path",
+      "description": "Please enter a path to use for the debug session",
+      "default": "${workspaceFolder}",
+      "type": "promptString"
     }
   ]
 }
